@@ -1,3 +1,11 @@
+;;  Copyright 2019-present Howard M. Lewis Ship
+;;
+;;  Licensed under the Apache License, Version 2.0 (the "License");
+;;  you may not use this file except in compliance with the License.
+;;  You may obtain a copy of the License at
+;;
+;;      http://www.apache.org/licenses/LICENSE-2.0
+
 (ns net.lewisship.multi
   "Support for multiple independant sub-commands within a single Joker script."
   (:require
@@ -9,6 +17,7 @@
 ;; Add :default and maybe :default-fn
 ;; Maybe invert :optional and :required to align with j.t.cli
 ;; Validate that argument ids are unique
+;; Identify command from unique prefix
 
 (defmacro ^:private cond-let
   [& clauses]

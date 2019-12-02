@@ -70,7 +70,7 @@ An example multi tool:
 #!/usr/bin/env joker
 
 (ns-sources
-  {"net.lewisship.multi" {:url "TBD"}})
+  {"net.lewisship.multi" {:url "https://raw.githubusercontent.com/hlship/multi/v1.0.0/src/net/lewisship/multi.joke"}})
 
 (ns example
   (:require [net.lewisship.multi :as multi]))
