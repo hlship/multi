@@ -1,6 +1,7 @@
+(ns-sources
+ {"net.lewisship.multi" {:url "src"}})
+
 (ns multi-tests
-  (:ns-sources
-   {"net.lewisship.multi" {:url "src"}}))
   (:require
    [net.lewisship.multi :as multi]
    [joker.os :as os]
