@@ -1,0 +1,311 @@
+(ns multi-tests
+  (:ns-sources
+   {"net.lewisship.multi" {:url "src"}}))
+  (:require
+   [net.lewisship.multi :as multi]
+   [joker.os :as os]
+   [joker.test :refer [deftest is use-fixtures]]))
+
+(def *data (atom nil))
+
+(defmacro with-err-str
+  [& body]
+  `(binding [*err* (joker.core/buffer__)]
+     ~@body
+     (str *err*)))
+
+(use-fixtures :each
+  (fn [f]
+    (reset! *data nil)
+    (with-redefs
+     [os/exit (fn [x] [::exit x])]
+      (f))))
+
+(defn ^{:command true}
+  capture
+  "Captures options and arguments
+
+  Additional docstring for capture.
+
+  Note that consistent indents are trimmed.
+
+  An example:
+
+    Indented two spaces.
+
+"
+  [command]
+  (reset! *data (select-keys command [:arguments :options])))
+
+(defn ^{:command true
+        :command-name "alias"}
+  __alias
+  "<alias docstring>"
+  [_])
+
+(defn ^{:command true
+        :command-opts [["-v" "--verbose" "Enable verbose logging"]]
+        :command-args [["HOST" "System configuration URL"
+                        :validate [#(re-matches #"https?://.+" %) "must be a URL"]]
+                       ["DATA" "Data to configure as KEY=VALUE"
+                        :id :key-values
+                        :parse-fn (fn [s]
+                                    (when-let [[_ k v] (re-matches #"(.+)=(.+)" s)]
+                                      [(keyword k) v]))
+                        :update-fn (fn [m [k v]]
+                                     (assoc m k v))
+                        :repeatable true]]}
+  configure
+  "Configures the system with keys and values"
+  [command]
+  (capture command))
+
+(deftest automatic-help-command
+  (let [output (with-out-str
+                 (is (= [::exit 1])
+                     (multi/dispatch {:tool-name "autohelp"
+                                      :namespaces ['multi-tests]
+                                      :arguments ["help"]})))]
+    (is (= "Usage: autohelp COMMAND ...
+
+Commands:
+      alias: <alias docstring>
+    capture: Captures options and arguments
+  configure: Configures the system with keys and values
+       help: Lists available commands
+"
+           output))))
+
+(deftest command-line-arguments-disallowed-unless-speced
+  (let [output (with-out-str
+                 (is (= [::exit 1])
+                     (multi/dispatch {:tool-name "noargs"
+                                      :namespaces ['multi-tests]
+                                      :arguments ["alias" "smith" "and" "jones"]})))]
+    (is (= "Usage: noargs alias [OPTIONS]
+<alias docstring>
+
+Options:
+  -h, --help  This command summary
+
+Error:
+  Unexpected argument 'smith'
+"
+           output))))
+
+(deftest automatic-help-for-command
+  (let [output (with-out-str
+                 (is (= [::exit 1])
+                     (multi/dispatch {:tool-name "helpopt"
+                                      :namespaces ['multi-tests]
+                                      :arguments ["configure" "-h"]})))]
+    (is (= "Usage: helpopt configure [OPTIONS] HOST DATA+
+Configures the system with keys and values
+
+Options:
+  -v, --verbose  Enable verbose logging
+  -h, --help     This command summary
+
+Arguments:
+  HOST: System configuration URL
+  DATA: Data to configure as KEY=VALUE
+"
+           output))))
+
+(deftest first-argument-must-identify-command
+  (let [output (with-out-str
+                 (is (= [::exit 1]
+                        (multi/dispatch {:tool-name "test"}))))]
+    (is (= "Usage: test COMMAND ...
+
+Commands:
+  help: Lists available commands
+
+Error:
+  No command provided
+"
+           output))))
+
+(deftest capture-arguments-and-options
+  (multi/dispatch {:tool-name "cap"
+                   :namespaces ['multi-tests]
+                   :arguments ["configure" "-v" "http://localhost:9989" "redux=true" "level=ultra"]})
+  (is (= {:arguments {:host "http://localhost:9989"
+                      :key-values {:redux "true"
+                                   :level "ultra"}}
+          :options {:verbose true}}
+         @*data)))
+
+(deftest indentation-of-docstring
+   (let [output (with-out-str
+                  (is (nil?
+                         (multi/dispatch {:tool-name "indent"
+                                          :namespaces ['multi-tests]
+                                          :arguments ["capture" "-h"]}))))]
+     (is (= "Usage: indent capture [OPTIONS]
+Captures options and arguments
+
+Additional docstring for capture.
+
+Note that consistent indents are trimmed.
+
+An example:
+
+  Indented two spaces.
+
+Options:
+  -h, --help  This command summary
+"
+            output)))
+  )
+
+(deftest invalid-positional-argument
+  (let [output (with-out-str
+                 (is (= [::exit 1]
+                        (multi/dispatch {:tool-name "invpos"
+                                         :namespaces ['multi-tests]
+                                         :arguments ["configure" "localhost"]}))))]
+    (is (= "Usage: invpos configure [OPTIONS] HOST DATA+
+Configures the system with keys and values
+
+Options:
+  -v, --verbose  Enable verbose logging
+  -h, --help     This command summary
+
+Arguments:
+  HOST: System configuration URL
+  DATA: Data to configure as KEY=VALUE
+
+Error:
+  HOST: must be a URL
+"
+           output))))
+
+(deftest invalid-positional-argument
+  (let [output (with-out-str
+                 (is (= [::exit 1]
+                        (multi/dispatch {:tool-name "invpos"
+                                         :namespaces ['multi-tests]
+                                         :arguments ["configure"]}))))]
+    (is (= "Usage: invpos configure [OPTIONS] HOST DATA+
+Configures the system with keys and values
+
+Options:
+  -v, --verbose  Enable verbose logging
+  -h, --help     This command summary
+
+Arguments:
+  HOST: System configuration URL
+  DATA: Data to configure as KEY=VALUE
+
+Error:
+  No value for required argument HOST
+"
+           output))))
+
+(defn ^{:command-args [["HOST" "Name of host"
+                        :vladidate [#(re-matches #"https?://.+" %) "must be a URL"]]]}
+  bad-key
+  [_])
+
+(deftest invalid-pos-spec-key
+  (let [error (with-err-str
+                (with-out-str
+                  (multi/dispatch* "xxx" {"bad-key" #'bad-key} ["bad-key"])))]
+    (is (= "Warning: command bad-key, argument :host contains invalid key(s): :vladidate
+"))))
+
+(defn ^{:command-opts [["-v" "--verbose" "Enable verbose logging"]]
+        :command-args [["HOST" "System configuration URL"
+                        :validate [#(re-matches #"https?://.+" %) "must be a URL"]
+                        :repeatable true]
+                       ["DATA" "Data to configure as KEY=VALUE"
+                        :id :key-values
+                        :parse-fn (fn [s]
+                                    (when-let [[_ k v] (re-matches #"(.+)=(.+)" s)]
+                                      [(keyword k) v]))
+                        :update-fn (fn [m [k v]]
+                                     (assoc m k v))
+                        :repeatable true]]}
+  too-many-repeatable
+  "Configures the system with keys and values"
+  [command]
+  (capture command))
+
+(deftest only-last-may-be-repeatable
+  (when-let [error  (is (thrown? Error
+                                 (multi/dispatch* "xxx" {"cmd" #'too-many-repeatable} ["cmd"])))]
+    (is (= "Argument :key-values of command cmd follows repeatable argument :host, but only the final argument may be repeatable"
+           (ex-message error)))))
+
+(defn ^{:command-opts [["-v" "--verbose" "Enable verbose logging"]]
+        :command-args [["HOST" "System configuration URL"
+                        :validate [#(re-matches #"https?://.+" %) "must be a URL"] 
+                        ;; Not valid because later argument is required
+                        :optional true]
+                       ["DATA" "Data to configure as KEY=VALUE"
+                        :id :key-values
+                        :parse-fn (fn [s]
+                                    (when-let [[_ k v] (re-matches #"(.+)=(.+)" s)]
+                                      [(keyword k) v]))
+                        :update-fn (fn [m [k v]]
+                                     (assoc m k v))
+                        :repeatable true]]}
+  invalid-optional
+  "Configures the system with keys and values"
+  [command]
+  (capture command))
+
+(deftest cant-have-optional-followed-by-required
+  (when-let [error  (is (thrown? Error
+                                 (multi/dispatch* "xxx" {"cmd" #'invalid-optional} ["cmd"])))]
+    (is (= "Argument :key-values of command cmd is not optional but follows optional argument :host"
+           (ex-message error)))))
+
+(defn ^{:command-opts [["-v" "--verbose" "Enable verbose logging"]]
+        :command-args [["HOST" "System configuration URL"
+                        :validate [#(re-matches #"https?://.+" %) "must be a URL"]]
+                       ["DATA" "Data to configure as KEY=VALUE"
+                        :id :key-values
+                        :parse-fn (fn [s]
+                                    (when-let [[_ k v] (re-matches #"(.+)=(.+)" s)]
+                                      [(keyword k) v]))
+                        :repeatable true]]}
+  default-update-fn
+  "Configures the system with keys and values"
+  [command]
+  (capture command))
+
+(deftest default-for-repeatable-update-fn
+  (multi/dispatch* "xxx" 
+                   {"capture" #'default-update-fn}
+                   ["capture" "http://localhost:9191" "foo=bar" "gnip=2"])
+  (is (= {:arguments
+          {:host "http://localhost:9191"
+                     ;; Default assoc for repeatable is to conj, in order, in a vector
+           :key-values [[:foo "bar"] 
+                        [:gnip "2"]]}
+          :options {}}
+         @*data)))
+
+(defn ^{:command-opts [["-v" "--verbose" "Enable verbose logging"]]
+        :command-args [["HOST" "System configuration URL"
+                        :validate [#(re-matches #"https?://.+" %) "must be a URL"]]
+                       ["DATA" "Data to configure as KEY=VALUE"
+                        :id :host
+                        :parse-fn (fn [s]
+                                    (when-let [[_ k v] (re-matches #"(.+)=(.+)" s)]
+                                      [(keyword k) v]))
+                        :repeatable true]]}
+  duplicate-argument-ids
+  "Configures the system with keys and values"
+  [command]
+  (capture command))
+
+(deftest positional-arguments-must-have-unique-id
+  (when-let [error  (is (thrown? Error
+                                 (multi/dispatch* "xxx" {"cmd" #'duplicate-argument-ids} ["cmd"])))]
+    (is (= "Argument :host of command cmd is not unique"
+           (ex-message error)))))
+
+(joker.test/run-tests)
