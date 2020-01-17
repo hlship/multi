@@ -3,7 +3,7 @@
 
 (ns multi-tests
   (:require
-   [net.lewisship.multi :as multi]
+   [net.lewisship.multi :as multi :refer [defcommand]]
    [joker.os :as os]
    [joker.test :refer [deftest is use-fixtures]]))
 
@@ -44,21 +44,21 @@
   "<alias docstring>"
   [_])
 
-(defn ^{:command true
-        :command-opts [["-v" "--verbose" "Enable verbose logging"]]
-        :command-args [["HOST" "System configuration URL"
-                        :validate [#(re-matches #"https?://.+" %) "must be a URL"]]
-                       ["DATA" "Data to configure as KEY=VALUE"
-                        :id :key-values
-                        :parse-fn (fn [s]
-                                    (when-let [[_ k v] (re-matches #"(.+)=(.+)" s)]
-                                      [(keyword k) v]))
-                        :update-fn (fn [m [k v]]
-                                     (assoc m k v))
-                        :repeatable true]]}
-  configure
+(defcommand configure
   "Configures the system with keys and values"
-  [command]
+  [verbose ["-v" "--verbose" "Enable verbose logging"]
+   :args
+   host ["HOST" "System configuration URL"
+         :validate [#(re-matches #"https?://.+" %) "must be a URL"]]
+   key-values ["DATA" "Data to configure as KEY=VALUE"
+               :id :key-values
+               :parse-fn (fn [s]
+                           (when-let [[_ k v] (re-matches #"(.+)=(.+)" s)]
+                             [(keyword k) v]))
+               :update-fn (fn [m [k v]]
+                            (assoc m k v))
+               :repeatable true]
+   :as command]
   (capture command))
 
 (deftest automatic-help-command
@@ -138,12 +138,12 @@ Error:
          @*data)))
 
 (deftest indentation-of-docstring
-   (let [output (with-out-str
-                  (is (nil?
-                         (multi/dispatch {:tool-name "indent"
-                                          :namespaces ['multi-tests]
-                                          :arguments ["capture" "-h"]}))))]
-     (is (= "Usage: indent capture [OPTIONS]
+  (let [output (with-out-str
+                 (is (nil?
+                      (multi/dispatch {:tool-name "indent"
+                                       :namespaces ['multi-tests]
+                                       :arguments ["capture" "-h"]}))))]
+    (is (= "Usage: indent capture [OPTIONS]
 Captures options and arguments
 
 Additional docstring for capture.
@@ -157,8 +157,7 @@ An example:
 Options:
   -h, --help  This command summary
 "
-            output)))
-  )
+           output))))
 
 (deftest invalid-positional-argument
   (let [output (with-out-str
@@ -241,7 +240,7 @@ Error:
 
 (defn ^{:command-opts [["-v" "--verbose" "Enable verbose logging"]]
         :command-args [["HOST" "System configuration URL"
-                        :validate [#(re-matches #"https?://.+" %) "must be a URL"] 
+                        :validate [#(re-matches #"https?://.+" %) "must be a URL"]
                         ;; Not valid because later argument is required
                         :optional true]
                        ["DATA" "Data to configure as KEY=VALUE"
@@ -278,13 +277,13 @@ Error:
   (capture command))
 
 (deftest default-for-repeatable-update-fn
-  (multi/dispatch* "xxx" 
+  (multi/dispatch* "xxx"
                    {"capture" #'default-update-fn}
                    ["capture" "http://localhost:9191" "foo=bar" "gnip=2"])
   (is (= {:arguments
           {:host "http://localhost:9191"
                      ;; Default assoc for repeatable is to conj, in order, in a vector
-           :key-values [[:foo "bar"] 
+           :key-values [[:foo "bar"]
                         [:gnip "2"]]}
           :options {}}
          @*data)))
