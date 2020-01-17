@@ -11,6 +11,7 @@
   (:require
    [joker.tools.cli :as cli]
    [joker.string :as str]
+   [joker.better-cond :as b]
    [joker.os :as os]))
 
 ;; TODO:
@@ -18,26 +19,6 @@
 ;; Maybe invert :optional and :required to align with j.t.cli
 ;; Validate that argument ids are unique
 ;; Identify command from unique prefix
-
-(defmacro ^:private cond-let
-  [& clauses]
-  (cond
-    (empty? clauses)
-    nil
-
-    (not (even? (count clauses)))
-    (throw (ex-info (str `cond-let " requires an even number of forms")
-                    {:form &form
-                     :meta (meta &form)}))
-
-    :else
-    (let [[test expr-or-binding-form & more-clauses] clauses]
-      (if (= :let test)
-        `(let ~expr-or-binding-form (cond-let ~@more-clauses))
-            ;; Standard case
-        `(if ~test
-           ~expr-or-binding-form
-           (cond-let ~@more-clauses))))))
 
 (defn ^:private show-errors
   [errors]
@@ -222,7 +203,7 @@
            ids #{}
            optional-id nil
            repeatable-id nil]
-      (cond-let
+      (b/cond
        (nil? this-spec)
        compiled
 
@@ -277,7 +258,7 @@
                 :argument-map {}
                 :errors []
                 :ignore-required false}]
-    (cond-let
+    (b/cond
      :let [{:keys [specs remaining argument-map errors ignore-required]} state
            [this-spec & more-specs] specs
            {:keys [label repeatable optional parse-fn assoc-fn id]} this-spec
@@ -335,7 +316,7 @@
    the commands map (map of command names to command Vars) and the command line arguments
    (the first argument is used to select the command to execute.)"
   [tool-name commands command-line-args]
-  (cond-let
+  (b/cond
 
    :let [[command-name] command-line-args
          base-command-map {:tool-name tool-name
