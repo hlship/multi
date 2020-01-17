@@ -9,17 +9,17 @@ and arguments allowed for each command.
 
 multi uses the following meta data keys:
 
-:command (boolean) -- indicates the function is a command 
+* `:command` (boolean) -- indicates the function is a command 
 
-:command-name (string, optional) -- overrides the name of the command, normally the symbol
+* `:command-name` (string, optional) -- overrides the name of the command, normally the symbol
 
-:doc (string) -- the command's docstring is the command description, used when printing help
+* `:doc` (string) -- the command's docstring is the command description, used when printing help
 
-:command-opts - a list of option specs, passed to joker.tools.cli/parse-opts
+* `:command-opts` - a list of option specs, passed to joker.tools.cli/parse-opts
 
-:command-args - a list of positional argument specs 
+* `:command-args` - a list of positional argument specs 
 
-A command option, -h / --help, is added to all commands automatically.
+A command option, `-h / --help`, is added to all commands automatically.
 
 A help command is also added; it displays the list of commands available.
 
@@ -40,26 +40,26 @@ in upper case). The optional second string is the documentation of the argument.
 
 Following that are key/value pairs:
 
-:id (keyword) - identifies which key is used in the arguments map; by default,
+* `:id` (keyword) - identifies which key is used in the arguments map; by default,
 this is the label converted to a lower case keyword
 
-:doc (string) - documentation for the argument
+* `:doc` (string) - documentation for the argument
 
-:optional (boolean) -- if true, the argument may be omitted if there isn't a
+* `:optional` (boolean) -- if true, the argument may be omitted if there isn't a
     command line argument to match
 
-:repeatable (boolean) -- if true, then any remaining command line arguments are processed
+* `:repeatable` (boolean) -- if true, then any remaining command line arguments are processed
 by the argument
 
-:parse-fn - passed the command line argument, returns a value, or throws an exception
+* `:parse-fn` - passed the command line argument, returns a value, or throws an exception
 
-:validate - a vector of function/message pairs
+* `:validate` - a vector of function/message pairs
 
-:update-fn - optional function used to update the (initially nil) entry for the argument in the :arguments map
+* `:update-fn` - optional function used to update the (initially nil) entry for the argument in the :arguments map
  
-:assoc-fn - optional function used to update the arguments map; passed the map, the id, and the parsed value
+* `:assoc-fn` - optional function used to update the arguments map; passed the map, the id, and the parsed value
 
-:update-fn and :assoc-fn are mutually exclusive.
+* `:update-fn` and `:assoc-fn` are mutually exclusive.
 
 For repeatable arguments, the default update function will construct a vector of values.
 For non-repeatable arguments, the default update function simply sets the value.
@@ -70,7 +70,7 @@ An example multi tool:
 #!/usr/bin/env joker
 
 (ns-sources
-  {"net.lewisship.multi" {:url "https://raw.githubusercontent.com/hlship/multi/v1.0.0/src/net/lewisship/multi.joke"}})
+  {"net.lewisship.multi" {:url "https://raw.githubusercontent.com/hlship/multi/v1.1.0/src/net/lewisship/multi.joke"}})
 
 (ns example
   (:require [net.lewisship.multi :as multi]))
@@ -89,8 +89,8 @@ An example multi tool:
                         :repeatable true]]}
   configure
   "Configures the system with keys and values"
-  [parsed-opts]
-  (pprint (select-keys parsed-opts [:options :arguments])))
+  [command-map]
+  (pprint (select-keys command-map [:options :arguments])))
 
 ;; Execution:
 
@@ -118,6 +118,69 @@ Arguments:
  :arguments {:host "http://localhost:9983",
              :key-values {:retries "3",
                           :alerts "on"}}}
+```
+
+## defcommand
+
+Starting in multi 1.1, you may use the `defcommand` macro to build your function and
+your options and argument lists all in a single go (this was inspired by
+parts of [Boot](https://boot-clj.com/)).
+
+Using `defcommand`, you define each parameter followed by the corresponding option or argument specification.
+
+The keyword `:args` switches from defining options to defining arguments.
+
+The `configure` command from the above example could be rewritten as:
+
+```
+(multi/defcommand configure
+  "Configures the system with keys and values"
+  [verbose ["-v" "--verbose" "Enable verbose logging"]
+   :args
+   host ["HOST" "System configuration URL"
+         :validate [#(re-matches #"https?://.+" %) "must be a URL"]]
+   key-values ["DATA" "Data to configure as KEY=VALUE"
+               :parse-fn (fn [s]
+                           (when-let [[_ k v] (re-matches #"(.+)=(.+)" s)]
+                             [(keyword k) v]))
+               :update-fn (fn [m [k v]]
+                            (assoc m k v))
+               :repeatable true]
+   :as command-map]
+  (pprint (select-keys command-map [:options :arguments])))
+```
+
+... but there's rarely a reason to use the `:as` term, as all of the options will already be
+available in local symbols `verbose`, `host`, and `key-values`.
+
+Note the `defcommand` will add an `:id` key/value pair to your option and argument definitions,
+based on the local symbol being assigned to.
+
+### Shared Option/Argument Specs
+
+In addition, it is allowed to reference a symbol containing the option or argument
+definition vector:
+
+```
+(def ^:private verbose-opt ["-v" "--verbose" "Enable verbose logging"])
+
+(multi/defcommand configure
+  "Configures the system with keys and values"
+  [verbose verbose-opt
+   :args
+  ...
+```
+
+This is helpful when a standard option is used across multiple commands.
+
+### Meta Data
+
+Finally, you can specify additional meta data for the command by applying
+it to the command's symbol.  For example:
+
+```
+(multi/defcommand ^{:command-name "conf"} configure
+  ...
 ```
 
 ## License
