@@ -4,6 +4,7 @@
 (ns multi-tests
   (:require
    [net.lewisship.multi :as multi :refer [defcommand]]
+   [joker.string :as str]
    [joker.os :as os]
    [joker.test :refer [deftest is use-fixtures]]))
 
@@ -74,15 +75,16 @@ Commands:
     capture: Captures options and arguments
   configure: Configures the system with keys and values
        help: Lists available commands
+   set-host: Test when spec contains function literal
 "
            output))))
 
 (deftest command-line-arguments-disallowed-unless-speced
   (let [output (with-out-str
-                 (is (= [::exit 1])
-                     (multi/dispatch {:tool-name "noargs"
-                                      :namespaces ['multi-tests]
-                                      :arguments ["alias" "smith" "and" "jones"]})))]
+                 (is (= [::exit 1]
+                        (multi/dispatch {:tool-name "noargs"
+                                         :namespaces ['multi-tests]
+                                         :arguments ["alias" "smith" "and" "jones"]}))))]
     (is (= "Usage: noargs alias [OPTIONS]
 <alias docstring>
 
@@ -213,7 +215,7 @@ Error:
                 (with-out-str
                   (multi/dispatch* "xxx" {"bad-key" #'bad-key} ["bad-key"])))]
     (is (= "Warning: command bad-key, argument :host contains invalid key(s): :vladidate
-"))))
+" error))))
 
 (defn ^{:command-opts [["-v" "--verbose" "Enable verbose logging"]]
         :command-args [["HOST" "System configuration URL"
@@ -307,5 +309,23 @@ Error:
                                  (multi/dispatch* "xxx" {"cmd" #'duplicate-argument-ids} ["cmd"])))]
     (is (= "Argument :host of command cmd is not unique"
            (ex-message error)))))
+
+(def host-arg ["HOST" "System configuration URL"
+               :validate [#(re-matches #"https?://.+" %) "must be a URL"]])
+
+(defcommand set-host
+  "Test when spec contains function literal"
+  [:args 
+   host host-arg]
+  (println :host host))
+
+(deftest can-handle-symbol-containing-function-literals
+  (let [output (with-out-str
+                 (is (= [::exit 1]
+                        (multi/dispatch {:tool-name "xxx"
+                                         :namespaces ['multi-tests]
+                                         :arguments ["set-host" "ftp://no.way"]}))))]
+    (is (str/includes? output "HOST: must be a URL")
+        (str "Missing text in: " output))))
 
 (joker.test/run-tests)

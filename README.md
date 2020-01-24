@@ -70,7 +70,7 @@ An example multi tool:
 #!/usr/bin/env joker
 
 (ns-sources
-  {"net.lewisship.multi" {:url "https://raw.githubusercontent.com/hlship/multi/v1.1.0/src/net/lewisship/multi.joke"}})
+  {"net.lewisship.multi" {:url "https://raw.githubusercontent.com/hlship/multi/v1.3.0/src/net/lewisship/multi.joke"}})
 
 (ns example
   (:require [net.lewisship.multi :as multi]))
@@ -171,7 +171,7 @@ definition vector:
   ...
 ```
 
-This is helpful when a standard option is used across multiple commands.
+This is helpful when a standard option or argument is used across multiple commands.
 
 ### Meta Data
 

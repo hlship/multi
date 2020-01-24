@@ -178,10 +178,7 @@
                           (update m k (fnil conj []) v))
 
                         :else
-                        assoc)
-            validate-pairs (when (seq validate)
-                             (->> (partition 2 2 validate)
-                                  (map vec)))]
+                        assoc)]
         (when (seq invalid-keys)
           (println-err (format "Warning: command %s, argument %s contains invalid key(s): %s"
                                command-name
@@ -194,7 +191,7 @@
          :repeatable repeatable
          :assoc-fn assoc-fn'
          :parse-fn (or parse-fn identity)
-         :validate validate-pairs}))))
+         :validate validate}))))
 
 (defn ^:private compile-position-specs
   [command-name specs]
@@ -204,52 +201,51 @@
            optional-id nil
            repeatable-id nil]
       (b/cond
-       (nil? this-spec)
-       compiled
+        (nil? this-spec)
+        compiled
 
-       :let [this-id (:id this-spec)]
+        :let [this-id (:id this-spec)]
 
-       (contains? ids this-id)
-       (throw (ex-info (str "Argument " this-id " of command " command-name " is not unique")
-                       {:command-name command-name
-                        :spec this-spec}))
+        (contains? ids this-id)
+        (throw (ex-info (str "Argument " this-id " of command " command-name " is not unique")
+                        {:command-name command-name
+                         :spec this-spec}))
 
        ;; Use the keyword ids, not the labels, since these are a programmer errors, not a runtime error
 
-       (and optional-id
-            (not (:optional this-spec)))
-       (throw (ex-info (str "Argument " this-id " of command " command-name " is not optional but follows optional argument " optional-id)
-                       {:command-name command-name
-                        :spec this-spec}))
+        (and optional-id
+             (not (:optional this-spec)))
+        (throw (ex-info (str "Argument " this-id " of command " command-name " is not optional but follows optional argument " optional-id)
+                        {:command-name command-name
+                         :spec this-spec}))
 
-       (some? repeatable-id)
-       (throw (ex-info (str "Argument " this-id " of command " command-name " follows repeatable argument " repeatable-id ", but only the final argument may be repeatable")
-                       {:command-name command-name
-                        :spec this-spec}))
+        (some? repeatable-id)
+        (throw (ex-info (str "Argument " this-id " of command " command-name " follows repeatable argument " repeatable-id ", but only the final argument may be repeatable")
+                        {:command-name command-name
+                         :spec this-spec}))
 
-       :else
-       (recur more-specs
-              (conj ids this-id)
-              (or (when (:optional this-spec)
-                    this-id)
-                  optional-id)
-              (or (when (:repeatable this-spec)
-                    this-id)
-                  repeatable-id))))))
+        :else
+        (recur more-specs
+               (conj ids this-id)
+               (or (when (:optional this-spec)
+                     this-id)
+                   optional-id)
+               (or (when (:repeatable this-spec)
+                     this-id)
+                   repeatable-id))))))
 
 (defn ^:private validate-argument
   "Validates the value against the :validate vector of the spec, returning nil on
    success, or the first error.  A validation fn that returns false or throws an exception
    is a failure."
   [positional-spec value]
-  (loop [[tuple & more] (:validate positional-spec)]
-    (when tuple
-      (let [[validation-fn validation-msg] tuple]
-        (if-not (try
-                  (validation-fn value)
-                  (catch Error _ false))
-          validation-msg
-          (recur more))))))
+  (loop [[validation-fn validation-msg & more] (:validate positional-spec)]
+    (when validation-fn
+      (if-not (try
+                (validation-fn value)
+                (catch Error _ false))
+        validation-msg
+        (recur more)))))
 
 (defn ^:private process-arguments
   [positional-specs arguments]
@@ -259,57 +255,57 @@
                 :errors []
                 :ignore-required false}]
     (b/cond
-     :let [{:keys [specs remaining argument-map errors ignore-required]} state
-           [this-spec & more-specs] specs
-           {:keys [label repeatable optional parse-fn assoc-fn id]} this-spec
-           [this-argument & more-arguments] remaining]
+      :let [{:keys [specs remaining argument-map errors ignore-required]} state
+            [this-spec & more-specs] specs
+            {:keys [label repeatable optional parse-fn assoc-fn id]} this-spec
+            [this-argument & more-arguments] remaining]
 
      ;; specs and arguments exhausted
-     (and (nil? this-spec)
-          (nil? this-argument))
-     [argument-map errors]
+      (and (nil? this-spec)
+           (nil? this-argument))
+      [argument-map errors]
 
      ;; Hit the first optional argument and out of command line arguments.
      ;; Since all subsequent arguments must be optional (verified by compile), we can stop here.
-     (and (nil? this-argument)
+      (and (nil? this-argument)
           ;; After the first argument is consumed by a repeatable, we treat the repeatable
           ;; command as optional.
-          (or optional ignore-required))
-     [argument-map errors]
+           (or optional ignore-required))
+      [argument-map errors]
 
      ;; Have a required argument and nothing to match it against.
-     (nil? this-argument)
-     [argument-map (conj errors (str "No value for required argument " label))]
+      (nil? this-argument)
+      [argument-map (conj errors (str "No value for required argument " label))]
 
      ;; Ran out of specs before running out of arguments.
-     (nil? this-spec)
-     [argument-map (conj errors (format "Unexpected argument '%s'" this-argument))]
+      (nil? this-spec)
+      [argument-map (conj errors (format "Unexpected argument '%s'" this-argument))]
 
-     :let [[parsed error] (try
-                            [(parse-fn this-argument) nil]
-                            (catch Error t
-                              [nil (format "Error in %s: %s" label (ex-message t))]))]
+      :let [[parsed error] (try
+                             [(parse-fn this-argument) nil]
+                             (catch Error t
+                               [nil (format "Error in %s: %s" label (ex-message t))]))]
 
-     error
-     [argument-map (conj errors error)]
+      error
+      [argument-map (conj errors (str label ": "  error))]
 
-     :let [validation-errors (validate-argument this-spec parsed)]
+      :let [validation-error (validate-argument this-spec parsed)]
 
-     (seq validation-errors)
-     [argument-map (into errors validation-errors)]
+      (some? validation-error)
+      [argument-map (conj errors (str label ": " validation-error))]
 
-     :else
-     (let [state' (assoc state
+      :else
+      (let [state' (assoc state
                          ;; Consume an argument
-                         :remaining more-arguments
+                          :remaining more-arguments
                          ;; Apply the argument
-                         :argument-map (assoc-fn argument-map id parsed))]
-       (recur (if repeatable
+                          :argument-map (assoc-fn argument-map id parsed))]
+        (recur (if repeatable
                 ;; leave the last, repeatable spec in place
-                (assoc state' :ignore-required true)
+                 (assoc state' :ignore-required true)
                 ;; Not repeatable; it has "consumed" an argument, so continue with
                 ;; next spec and next argument
-                (assoc state' :specs more-specs)))))))
+                 (assoc state' :specs more-specs)))))))
 
 (defn dispatch*
   "Executes a command from a multi-tool; this is normally invoked via dispatch, using
@@ -318,46 +314,46 @@
   [tool-name commands command-line-args]
   (b/cond
 
-   :let [[command-name] command-line-args
-         base-command-map {:tool-name tool-name
-                           ::command-map commands}]
+    :let [[command-name] command-line-args
+          base-command-map {:tool-name tool-name
+                            ::command-map commands}]
 
-   (or (nil? command-name)
-       (str/starts-with? command-name "-"))
-   (do
-     (show-tool-help base-command-map ["No command provided"])
-     (os/exit 1))
+    (or (nil? command-name)
+        (str/starts-with? command-name "-"))
+    (do
+      (show-tool-help base-command-map ["No command provided"])
+      (os/exit 1))
 
-   :let [command-var (get commands command-name)]
+    :let [command-var (get commands command-name)]
 
-   (nil? command-var)
-   (show-tool-help base-command-map
-                   [(format "'%s' is not a command" command-name)])
+    (nil? command-var)
+    (show-tool-help base-command-map
+                    [(format "'%s' is not a command" command-name)])
 
-   :let [var-meta (meta command-var)
-         positional-specs (compile-position-specs command-name (:command-args var-meta))
-         command-map (merge base-command-map
-                            (cli/parse-opts (rest command-line-args)
-                                            (conj (:command-opts var-meta)
-                                                  ["-h" "--help" "This command summary"]))
-                            {:command-name command-name
-                             ::positional-specs positional-specs
-                             :doc (:doc var-meta)})
-         {:keys [options arguments]
-          opt-errors :errors} command-map
-         [processed-arguments arg-errors] (process-arguments positional-specs arguments)
-         errors (concat opt-errors arg-errors)]
+    :let [var-meta (meta command-var)
+          positional-specs (compile-position-specs command-name (:command-args var-meta))
+          command-map (merge base-command-map
+                             (cli/parse-opts (rest command-line-args)
+                                             (conj (:command-opts var-meta)
+                                                   ["-h" "--help" "This command summary"]))
+                             {:command-name command-name
+                              ::positional-specs positional-specs
+                              :doc (:doc var-meta)})
+          {:keys [options arguments]
+           opt-errors :errors} command-map
+          [processed-arguments arg-errors] (process-arguments positional-specs arguments)
+          errors (concat opt-errors arg-errors)]
 
-   (:help options)
-   (show-summary command-map nil)
+    (:help options)
+    (show-summary command-map nil)
 
-   (seq errors)
-   (do
-     (show-summary command-map errors)
-     (os/exit 1))
+    (seq errors)
+    (do
+      (show-summary command-map errors)
+      (os/exit 1))
 
-   :else
-   (command-var (assoc command-map :arguments processed-arguments))))
+    :else
+    (command-var (assoc command-map :arguments processed-arguments))))
 
 (defn dispatch
   "Locates commands in namespaces, finds the current command
@@ -425,48 +421,35 @@
            :pending true
            :consuming :option-def)))
 
-(defn ^:private expand-symbol
-  "If the form is a symbol, attempt to extract the value of that symbol from
-the corresponding Var.
-
-Returns the evaluated value if possible, or the form if not a symbol or if
-the symbol has no value."
-  [form]
-  (if-not (symbol? form)
-    form
-    (if-let [symbol-var (ns-resolve *ns* form)]
-      (deref symbol-var)
-      form)))
-
 (defmethod consumer :option-def
-  [state form]
-  (let [option-def (expand-symbol form)]
-    ;; TODO: Support symbol, which will expand to (into symbol :id xxx)
-    (when-not (vector? option-def)
-      (fail "Expected option definition" state form))
-
-    (let [option-symbol (:symbol state)
-          option-def' (conj option-def :id (-> option-symbol name keyword))]
-      (-> state
-          (update :command-options conj option-def')
-          (update :option-symbols conj option-symbol)
-          (dissoc :symbol :pending)
-          (assoc :consuming :options)))))
+  [state option-def]
+  (when-not (or (symbol? option-def)
+                (vector? option-def))
+    
+    (fail "Expected option definition" state option-def))
+ 
+  (let [option-symbol (:symbol state)
+        option-def' (list 'conj option-def :id (-> option-symbol name keyword))]
+    (-> state
+        (update :command-options conj option-def')
+        (update :option-symbols conj option-symbol)
+        (dissoc :symbol :pending)
+        (assoc :consuming :options))))
 
 (defmethod consumer :arg-def
-  [state form]
-  (let [arg-def (expand-symbol form)]
+  [state arg-def]
+  (when-not (or (symbol? arg-def)
+                (vector? arg-def))
+    (fail "Expected argument definition" state arg-def))
 
-    (when-not (vector? arg-def)
-      (fail "Expected argument definition" state form))
 
-    (let [arg-symbol (:symbol state)
-          arg-def' (conj arg-def :id (-> arg-symbol name keyword))]
-      (-> state
-          (update :command-args conj arg-def')
-          (update :arg-symbols conj arg-symbol)
-          (dissoc :symbol :pending)
-          (assoc :consuming :args)))))
+  (let [arg-symbol (:symbol state)
+        arg-def' (list 'conj arg-def :id (-> arg-symbol name keyword))]
+    (-> state
+        (update :command-args conj arg-def')
+        (update :arg-symbols conj arg-symbol)
+        (dissoc :symbol :pending)
+        (assoc :consuming :args))))
 
 (defmethod consumer :args
   [state form]
