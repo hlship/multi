@@ -1,4 +1,6 @@
-# 1.2.0 -- UNRELEASED
+# 1.2.0 -- 23 Jan 2020
+
+Now uses joker.better-cond namespace, so requires Joker v0.14.1 or later.
 
 # 1.1.0 -- 17 Jan 2020
 
