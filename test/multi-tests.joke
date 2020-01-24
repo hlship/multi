@@ -313,10 +313,11 @@ Error:
 (def host-arg ["HOST" "System configuration URL"
                :validate [#(re-matches #"https?://.+" %) "must be a URL"]])
 
-(defcommand set-host
+(defcommand set-host-action
   "Test when spec contains function literal"
   [:args 
-   host host-arg]
+   host host-arg
+   :command-name "set-host"]
   (println :host host))
 
 (deftest can-handle-symbol-containing-function-literals

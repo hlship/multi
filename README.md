@@ -156,6 +156,31 @@ available in local symbols `verbose`, `host`, and `key-values`.
 Note the `defcommand` will add an `:id` key/value pair to your option and argument definitions,
 based on the local symbol being assigned to.
 
+### :command-name <string>
+
+You may also override the command name away from its default (the name of the function).
+
+```
+(multi/defcommand configure-command
+  "Configures the system with keys and values"
+  [verbose ["-v" "--verbose" "Enable verbose logging"]
+   :args
+   host ["HOST" "System configuration URL"
+         :validate [#(re-matches #"https?://.+" %) "must be a URL"]]
+   key-values ["DATA" "Data to configure as KEY=VALUE"
+               :parse-fn (fn [s]
+                           (when-let [[_ k v] (re-matches #"(.+)=(.+)" s)]
+                             [(keyword k) v]))
+               :update-fn (fn [m [k v]]
+                            (assoc m k v))
+               :repeatable true]
+   :command-name "configure"]
+  ...)
+```
+
+This changes the name of the command, not the name of the function, and is 
+typically used when the command name clashes with a function from joker.core.
+
 ### Shared Option/Argument Specs
 
 In addition, it is allowed to reference a symbol containing the option or argument
@@ -183,7 +208,10 @@ it to the command's symbol.  For example:
   ...
 ```
 
+  ... though there's rarely a need to ever do this.
+
 ## License
 
 `multi` is (c) 2019-present Howard M. Lewis Ship.
+
 It is released under the terms of the Apache Software License, 2.0.
