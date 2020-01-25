@@ -8,6 +8,8 @@ Command names may be abbreviated to a unique prefix.
 Added `net.lewisship.multi/collect`, which is useful for repeatable options or arguments;
 it collects each value into a vector.
 
+[Closed Issues](https://github.com/hlship/multi/milestone/1?closed=1)
+
 # 1.3.0 - 24 Jan 2020
 
 Fixed a bug w/ `:validate` in argument specs.
