@@ -91,7 +91,8 @@ Commands:
                  (is (= [::exit 1]
                         (multi/dispatch {:tool-name "noargs"
                                          :namespaces ['multi-tests]
-                                         :arguments ["alias" "smith" "and" "jones"]}))))]
+                                         ;; Can use a unique prefix of command name:
+                                         :arguments ["al" "smith" "and" "jones"]}))))]
     (is (= "Usage: noargs alias [OPTIONS]
 <alias docstring>
 
@@ -135,6 +136,15 @@ Error:
   No command provided
 "
            output))))
+
+(deftest when-command-not-recognized
+  (let [output (with-out-str
+                 (is (= [::exit 1]
+                        (multi/dispatch {:tool-name "test"
+                                         :namespaces ['multi-tests]
+                                         :arguments ["zztop"]}))))]
+    (is (str/includes? output "'zztop' is not a command")
+        (str "Missing test: " output))))
 
 (deftest capture-arguments-and-options
   (multi/dispatch {:tool-name "cap"
@@ -343,5 +353,14 @@ Error:
                                          :arguments ["set-host" "ftp://no.way"]}))))]
     (is (str/includes? output "HOST: must be a URL")
         (str "Missing text in: " output))))
+
+(deftest command-name-not-unique
+    (let [output (with-out-str
+                   (is (= [::exit 1]
+                          (multi/dispatch {:tool-name "xxx"
+                                           :namespaces ['multi-tests]
+                                           :arguments ["c" "ftp://no.way"]}))))]
+      (is (str/includes? output "'c' matches commands capture, configure")
+          (str "Missing text in: " output))))
 
 (joker.test/run-tests)

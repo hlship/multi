@@ -102,7 +102,7 @@
 
   errors is a seq of strings to display as errors."
   [command-map errors]
-  (let [{:keys [::tool-name ::tool-doc command-name summary ::positional-specs doc]} command-map]
+  (let [{:keys [::tool-name ::tool-doc ::command-name summary ::positional-specs ::doc]} command-map]
     (apply println
            (remove nil? (concat ["Usage:" tool-name command-name
                                  "[OPTIONS]"]
@@ -317,6 +317,16 @@
                 ;; next spec and next argument
                  (assoc state' :specs more-specs)))))))
 
+(defn ^:private find-matches 
+  [m s]
+  ;; If can find an exact match, then keep just that;
+  (if (get m s)
+    [s]
+    ;; Otherwise, look for command names prefixed by the string
+    (->> m
+         keys
+         (filter #(str/starts-with? % s)))))
+
 (defn dispatch*
   "Executes a command from a multi-tool; this is normally invoked via dispatch, using
   the commands map (map of command names to command Vars) and the command line arguments
@@ -348,21 +358,35 @@
        (show-tool-help base-command-map ["No command provided"])
        (os/exit 1))
 
-     :let [command-var (get commands command-name)]
+     :let [matching-names (find-matches commands command-name)]
 
-     (nil? command-var)
-     (show-tool-help base-command-map
-                     [(format "'%s' is not a command" command-name)])
+     (empty? matching-names)
+     (do
+       (show-tool-help base-command-map
+                       [(format "'%s' is not a command" command-name)])
+       (os/exit 1))
 
-     :let [var-meta (meta command-var)
+     (< 1 (count matching-names)) 
+     (do
+       (show-tool-help base-command-map
+                       [(format "'%s' matches commands %s"
+                                command-name
+                                (->> matching-names
+                                     sort
+                                     (str/join ", ")))])
+       (os/exit 1))
+
+     :let [matching-name (first matching-names)
+           command-var (get commands matching-name)
+           var-meta (meta command-var)
            positional-specs (compile-position-specs command-name (:command-args var-meta))
            command-map (merge base-command-map
                               (cli/parse-opts command-args
                                               (conj (:command-opts var-meta)
                                                     ["-h" "--help" "This command summary"]))
-                              {:command-name command-name
+                              {::command-name matching-name
                                ::positional-specs positional-specs
-                               :doc (:doc var-meta)})
+                               ::doc (:doc var-meta)})
            {:keys [options arguments]
             opt-errors :errors} command-map
            [processed-arguments arg-errors] (process-arguments positional-specs arguments)
