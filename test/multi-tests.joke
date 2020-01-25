@@ -2,6 +2,9 @@
  {"net.lewisship.multi" {:url "src"}})
 
 (ns multi-tests
+  "This is a test multi-tool.
+
+  It has sub-commands."
   (:require
    [net.lewisship.multi :as multi :refer [defcommand]]
    [joker.string :as str]
@@ -69,6 +72,10 @@
                                       :namespaces ['multi-tests]
                                       :arguments ["help"]})))]
     (is (= "Usage: autohelp COMMAND ...
+
+This is a test multi-tool.
+
+It has sub-commands.
 
 Commands:
       alias: <alias docstring>
@@ -183,7 +190,7 @@ Error:
 "
            output))))
 
-(deftest invalid-positional-argument
+(deftest missing-positional-argument
   (let [output (with-out-str
                  (is (= [::exit 1]
                         (multi/dispatch {:tool-name "invpos"
@@ -213,7 +220,9 @@ Error:
 (deftest invalid-pos-spec-key
   (let [error (with-err-str
                 (with-out-str
-                  (multi/dispatch* "xxx" {"bad-key" #'bad-key} ["bad-key"])))]
+                  (multi/dispatch* {:tool-name "xxx"
+                                    :commands {"bad-key" #'bad-key}
+                                    :args ["bad-key"]})))]
     (is (= "Warning: command bad-key, argument :host contains invalid key(s): :vladidate
 " error))))
 
@@ -236,7 +245,9 @@ Error:
 
 (deftest only-last-may-be-repeatable
   (when-let [error  (is (thrown? Error
-                                 (multi/dispatch* "xxx" {"cmd" #'too-many-repeatable} ["cmd"])))]
+                                 (multi/dispatch* {:tool-name "xxx"
+                                                   :commands {"cmd" #'too-many-repeatable}
+                                                   :args ["cmd"]})))]
     (is (= "Argument :key-values of command cmd follows repeatable argument :host, but only the final argument may be repeatable"
            (ex-message error)))))
 
@@ -260,7 +271,9 @@ Error:
 
 (deftest cant-have-optional-followed-by-required
   (when-let [error  (is (thrown? Error
-                                 (multi/dispatch* "xxx" {"cmd" #'invalid-optional} ["cmd"])))]
+                                 (multi/dispatch* {:tool-name "xxx"
+                                                   :commands {"cmd" #'invalid-optional}
+                                                   :args ["cmd"]})))]
     (is (= "Argument :key-values of command cmd is not optional but follows optional argument :host"
            (ex-message error)))))
 
@@ -279,9 +292,9 @@ Error:
   (capture command))
 
 (deftest default-for-repeatable-update-fn
-  (multi/dispatch* "xxx"
-                   {"capture" #'default-update-fn}
-                   ["capture" "http://localhost:9191" "foo=bar" "gnip=2"])
+  (multi/dispatch* {:tool-name "xxx"
+                    :commands {"capture" #'default-update-fn}
+                    :args ["capture" "http://localhost:9191" "foo=bar" "gnip=2"]})
   (is (= {:arguments
           {:host "http://localhost:9191"
                      ;; Default assoc for repeatable is to conj, in order, in a vector
@@ -306,7 +319,9 @@ Error:
 
 (deftest positional-arguments-must-have-unique-id
   (when-let [error  (is (thrown? Error
-                                 (multi/dispatch* "xxx" {"cmd" #'duplicate-argument-ids} ["cmd"])))]
+                                 (multi/dispatch* {:tool-name "xxx"
+                                                   :commands {"cmd" #'duplicate-argument-ids}
+                                                   :args ["cmd"]})))]
     (is (= "Argument :host of command cmd is not unique"
            (ex-message error)))))
 
@@ -315,7 +330,7 @@ Error:
 
 (defcommand set-host-action
   "Test when spec contains function literal"
-  [:args 
+  [:args
    host host-arg
    :command-name "set-host"]
   (println :host host))

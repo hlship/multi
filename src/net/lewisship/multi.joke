@@ -28,24 +28,10 @@
     (doseq [e errors]
       (println (str "  " e)))))
 
-(defn ^:private show-tool-help
-  [parsed-opts errors]
-  (let [{:keys [tool-name ::command-map]} parsed-opts
-        ks (-> command-map keys sort)
-        width (+ 2 (apply max (map count ks)))]
-    (println "Usage:" tool-name "COMMAND ...")
-    (println)
-    (println "Commands:")
-    (doseq [k ks
-            :let [doc-string (-> command-map (get k) meta :doc (or ""))
-                  first-doc (-> doc-string str/split-lines first)]]
-      (println (str (str/pad-left k " " width) ": " first-doc))))
-  (show-errors errors))
-
-(defn ^:private help
-  "Lists available commands"
-  [parsed-opts]
-  (show-tool-help parsed-opts nil))
+(defn collect
+  "Used as the :assoc-fn for repeatable options/arguments that collect a series of values into a vector."
+  [m k v]
+  (update m k #(conj (or % []) v)))
 
 (defn locate-commands
   "Locates commands, function with the :command metadata.
@@ -116,11 +102,12 @@
 
   errors is a seq of strings to display as errors."
   [command-map errors]
-  (let [{:keys [tool-name command-name summary ::positional-specs doc]} command-map]
+  (let [{:keys [::tool-name ::tool-doc command-name summary ::positional-specs doc]} command-map]
     (apply println
            (remove nil? (concat ["Usage:" tool-name command-name
                                  "[OPTIONS]"]
                                 (map arg-spec->str positional-specs))))
+    
     (when doc
       (-> doc cleanup-docstring println))
 
@@ -143,6 +130,29 @@
                     doc)))))
 
     (show-errors errors)))
+
+(defn ^:private show-tool-help
+  [parsed-opts errors]
+  (let [{:keys [::tool-name ::tool-doc ::command-map]} parsed-opts
+        ks (-> command-map keys sort)
+        width (+ 2 (apply max (map count ks)))]
+    (println "Usage:" tool-name "COMMAND ...")
+    (when tool-doc
+      (println)
+      (-> tool-doc cleanup-docstring println))
+
+    (println)
+    (println "Commands:")
+    (doseq [k ks
+            :let [doc-string (-> command-map (get k) meta :doc (or ""))
+                  first-doc (-> doc-string str/split-lines first)]]
+      (println (str (str/pad-left k " " width) ": " first-doc))))
+  (show-errors errors))
+
+(defn ^:private help
+  "Lists available commands"
+  [parsed-opts]
+  (show-tool-help parsed-opts nil))
 
 (defn ^:private compile-positional-spec
   "Positional specs are similar to option specs."
@@ -309,51 +319,65 @@
 
 (defn dispatch*
   "Executes a command from a multi-tool; this is normally invoked via dispatch, using
-   the commands map (map of command names to command Vars) and the command line arguments
-   (the first argument is used to select the command to execute.)"
-  [tool-name commands command-line-args]
-  (b/cond
+  the commands map (map of command names to command Vars) and the command line arguments
+  (the first argument is used to select the command to execute.)
 
-    :let [[command-name] command-line-args
-          base-command-map {:tool-name tool-name
-                            ::command-map commands}]
+  Options:
+  :tool-name - name of tool, used in usage
+  :tool-doc - documentation for the tool, used in usage
+  :commands - map of string to Var; each Var is a command
+  :args - seq of strings, command line arguments to parse
 
-    (or (nil? command-name)
-        (str/starts-with? command-name "-"))
-    (do
-      (show-tool-help base-command-map ["No command provided"])
-      (os/exit 1))
+  Note: the 3 argument arity of this fn is deprecated and may be removed in the future."
+([tool-name commands args]
+ (dispatch* {:tool-name tool-name
+             :commands commands
+             :args args})) 
+  ([options]
+   (b/cond
 
-    :let [command-var (get commands command-name)]
+     :let [{:keys [tool-name tool-doc commands args]} options
+           [command-name & command-args] args
+           base-command-map {::tool-name tool-name
+                             ::tool-doc tool-doc
+                             ::command-map commands}]
 
-    (nil? command-var)
-    (show-tool-help base-command-map
-                    [(format "'%s' is not a command" command-name)])
+     (or (nil? command-name)
+         (str/starts-with? command-name "-"))
+     (do
+       (show-tool-help base-command-map ["No command provided"])
+       (os/exit 1))
 
-    :let [var-meta (meta command-var)
-          positional-specs (compile-position-specs command-name (:command-args var-meta))
-          command-map (merge base-command-map
-                             (cli/parse-opts (rest command-line-args)
-                                             (conj (:command-opts var-meta)
-                                                   ["-h" "--help" "This command summary"]))
-                             {:command-name command-name
-                              ::positional-specs positional-specs
-                              :doc (:doc var-meta)})
-          {:keys [options arguments]
-           opt-errors :errors} command-map
-          [processed-arguments arg-errors] (process-arguments positional-specs arguments)
-          errors (concat opt-errors arg-errors)]
+     :let [command-var (get commands command-name)]
 
-    (:help options)
-    (show-summary command-map nil)
+     (nil? command-var)
+     (show-tool-help base-command-map
+                     [(format "'%s' is not a command" command-name)])
 
-    (seq errors)
-    (do
-      (show-summary command-map errors)
-      (os/exit 1))
+     :let [var-meta (meta command-var)
+           positional-specs (compile-position-specs command-name (:command-args var-meta))
+           command-map (merge base-command-map
+                              (cli/parse-opts command-args
+                                              (conj (:command-opts var-meta)
+                                                    ["-h" "--help" "This command summary"]))
+                              {:command-name command-name
+                               ::positional-specs positional-specs
+                               :doc (:doc var-meta)})
+           {:keys [options arguments]
+            opt-errors :errors} command-map
+           [processed-arguments arg-errors] (process-arguments positional-specs arguments)
+           errors (concat opt-errors arg-errors)]
 
-    :else
-    (command-var (assoc command-map :arguments processed-arguments))))
+     (:help options)
+     (show-summary command-map nil)
+
+     (seq errors)
+     (do
+       (show-summary command-map errors)
+       (os/exit 1))
+
+     :else
+     (command-var (assoc command-map :arguments processed-arguments)))))
 
 (defn dispatch
   "Locates commands in namespaces, finds the current command
@@ -382,20 +406,26 @@
   joker.tools.multi and may change in the future."
   [configuration]
   (try
-    (let [{:keys [tool-name]
+    (let [{:keys [tool-name tool-doc]
            namespace-symbols :namespaces
            command-line-args :arguments
            :or {command-line-args *command-line-args*}} configuration
           command-map (assoc
                        (locate-commands namespace-symbols)
                        "help" #'help)]
-      (dispatch* tool-name command-map command-line-args))
+      (dispatch* {:tool-name tool-name
+                  :tool-doc (or tool-doc
+                                (some-> namespace-symbols first find-ns meta :doc)) 
+                  :commands command-map
+                  :args command-line-args}))
     (catch Error t
       (println-err "Command failed:" t)
       (when-let [data (ex-data t)]
         (binding [*out* *err*]
           (pprint data)))
       (os/exit 1))))
+
+;; Start of code to support defcommand:
 
 (defn ^:private fail [message state form]
   (throw (ex-info message
@@ -495,7 +525,7 @@
        :command-name form
        :consuming :keyword)))
 
-(defn ^:private parse-parameters
+(defn ^:private parse-interface
   [forms]
   (let [initial-state {:consuming :options
                        :option-symbols []
@@ -504,21 +534,29 @@
                        :command-args []}
         final-state (reduce consumer initial-state forms)]
     (when (:pending final-state)
-      (throw (ex-info "Missing data in parameter definitions"
+      (throw (ex-info "Missing data in interface definitions"
                       {:state final-state
                        :forms forms})))
     final-state))
 
 (defmacro defcommand
-  [command-name docstring parameters & body]
+  "Defines a command for multi.
+
+  Commands must always have a docstring.
+  The first line of the docstring is the summary used by the help command.
+
+  The interface follows, which is described in the multi readme.
+
+  Finally, the body."
+  [command-name docstring interface & body]
   (assert (simple-symbol? command-name)
           "defcommand expects a symbol for command name")
   (assert (string? docstring)
           (throw "defcommand requires a docstring"))
-  (assert (vector? parameters)
-          "defcommand expects a vector of parameters")
+  (assert (vector? interface)
+          "defcommand expects a vector to define the interface")
   (let [symbol-meta (meta command-name)
-        parsed (parse-parameters parameters)
+        parsed (parse-interface interface)
         {:keys [option-symbols command-options
                 arg-symbols command-args
                 command-map-symbol]
