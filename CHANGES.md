@@ -1,4 +1,4 @@
-# 1.4.0 - UNRELEASEd
+# 1.4.0 - 25 Jan 2020
 
 Tools can now provide a description of the tool as the docstring of the first namespace;
 this is displayed by the built-in `help` command.
