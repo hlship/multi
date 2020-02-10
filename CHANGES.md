@@ -1,3 +1,9 @@
+# 1.5.0 -- UNRELEASED
+
+`net.lewisship.multi/dispatch` is now a macro; if :namespaces is omitted, it defaults to the current namespace.
+
+[Closed Issues](https://github.com/hlship/multi/milestone/2?closed=1)
+
 # 1.4.0 - 25 Jan 2020
 
 Tools can now provide a description of the tool as the docstring of the first namespace;

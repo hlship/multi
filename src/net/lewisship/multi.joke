@@ -100,6 +100,9 @@
 
   Uses the command map that is passed to a command function.
 
+  When using `defcommand`, an :as clause in the interface gives access to this
+  command map.
+
   errors is a seq of strings to display as errors."
   [command-map errors]
   (let [{:keys [::tool-name ::tool-doc ::command-name summary ::positional-specs ::doc]} command-map]
@@ -107,7 +110,7 @@
            (remove nil? (concat ["Usage:" tool-name command-name
                                  "[OPTIONS]"]
                                 (map arg-spec->str positional-specs))))
-    
+
     (when doc
       (-> doc cleanup-docstring println))
 
@@ -317,7 +320,7 @@
                 ;; next spec and next argument
                  (assoc state' :specs more-specs)))))))
 
-(defn ^:private find-matches 
+(defn ^:private find-matches
   [m s]
   ;; If can find an exact match, then keep just that;
   (if (get m s)
@@ -339,10 +342,10 @@
   :args - seq of strings, command line arguments to parse
 
   Note: the 3 argument arity of this fn is deprecated and may be removed in the future."
-([tool-name commands args]
- (dispatch* {:tool-name tool-name
-             :commands commands
-             :args args})) 
+  ([tool-name commands args]
+   (dispatch* {:tool-name tool-name
+               :commands commands
+               :args args}))
   ([options]
    (b/cond
 
@@ -366,7 +369,7 @@
                        [(format "'%s' is not a command" command-name)])
        (os/exit 1))
 
-     (< 1 (count matching-names)) 
+     (< 1 (count matching-names))
      (do
        (show-tool-help base-command-map
                        [(format "'%s' matches commands %s"
@@ -403,7 +406,7 @@
      :else
      (command-var (assoc command-map :arguments processed-arguments)))))
 
-(defn dispatch
+(defmacro dispatch
   "Locates commands in namespaces, finds the current command
   (as identified by the first command line argument) and processes CLI options and arguments.
 
@@ -412,42 +415,43 @@
   :arguments - command line arguments to parse (defaults to *command-line-args*)
   :namespaces - symbols identifying namespaces to search for commands
 
+  If :namespaces is omitted, it defaults to the current namespace.
+
   dispatch will load any namespaces specified.
 
-  If option and argument parsing is unsuccesful, then
+  If option and argument parsing is unsuccessful, then
   a command usage summary is printed, along with errors, and the program exits
   with error code 1.
 
   On success, the command function is invoked with a command map:
 
-  :tool-name - the name of the tool (useful for error messages)
-  :command-name - the name of the command
   :options - map of command line options (via joker.tools.cli/parse-opts)
   :arguments - map of processed command line arguments
-  :doc - the documentation (docstring) of the comamnd
 
   Other keys may be present in the command map; these are internal to
   joker.tools.multi and may change in the future."
   [configuration]
-  (try
-    (let [{:keys [tool-name tool-doc]
-           namespace-symbols :namespaces
-           command-line-args :arguments
-           :or {command-line-args *command-line-args*}} configuration
-          command-map (assoc
-                       (locate-commands namespace-symbols)
-                       "help" #'help)]
-      (dispatch* {:tool-name tool-name
-                  :tool-doc (or tool-doc
-                                (some-> namespace-symbols first find-ns meta :doc)) 
-                  :commands command-map
-                  :args command-line-args}))
-    (catch Error t
-      (println-err "Command failed:" t)
-      (when-let [data (ex-data t)]
-        (binding [*out* *err*]
-          (pprint data)))
-      (os/exit 1))))
+  (let [default-ns (ns-name *ns*)]
+    `(try
+       (let [configuration# ~configuration
+             namespace-symbols# (or (:namespaces configuration#)
+                                    ['~default-ns])
+             arguments# (or (:arguments configuration#)
+                            *command-line-args*)
+             command-map# (assoc
+                           (locate-commands namespace-symbols#)
+                           "help" #'help)]
+         (dispatch* {:tool-name (:tool-name configuration#)
+                     :tool-doc (or (:tool-doc configuration#)
+                                   (some-> namespace-symbols# first find-ns meta :doc))
+                     :commands command-map#
+                     :args arguments#}))
+       (catch Error t#
+         (println-err "Command failed:" t#)
+         (when-let [data# (ex-data t#)]
+           (binding [*out* *err*]
+             (pprint data#)))
+         (os/exit 1)))))
 
 ;; Start of code to support defcommand:
 

@@ -3,18 +3,20 @@
 `net.lewisship.multi` is a complement to joker.tools.cli that allows a single tool, a Joker script, to 
 contain multiple commands, each with its own command line options and arguments.
 
+At the core is the `net.lewisship.multi/dispatch` macro; this identifies the name of the tool, and 
+optionally, the namespaces to collect commands from.
+
 Each command within the tool is provided via the `net.lewisship.multi/defcommand` macro.
 
 A command option, `-h / --help`, is added to all commands automatically.
 
 A `help` command is also added; it displays the list of commands available.
-
-Tool documentation may be provided as the docstring of the first namespace
-passed to `net.lewisship.multi/dispatch`.
-Tool documentation appears at the top of the output from the `help` command.
-
 The help command displays the first line of each command's docstring, as a summary
 of the command.
+
+The `help` command displays a short summary of what the overall tool does; this is the docstring
+of the first namespace provided to `dispatch` (again, if omitted, the current namespace
+is used).
 
 Whereas command option parsing is driven by the option names, command argument
 parsing is positional. Each command option spec will consume one command line argument
@@ -79,8 +81,7 @@ For non-repeatable arguments, the default update function simply sets the value.
 
 ;; Execution:
 
-(multi/dispatch {:tool-name "example"
-                 :namespaces ['example]]})
+(multi/dispatch {:tool-name "example"]})
 ```
 If this file is saved as `bin/example`, it can be executed directly:
 

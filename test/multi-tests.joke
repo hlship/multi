@@ -69,7 +69,6 @@
   (let [output (with-out-str
                  (is (= [::exit 1])
                      (multi/dispatch {:tool-name "autohelp"
-                                      :namespaces ['multi-tests]
                                       :arguments ["help"]})))]
     (is (= "Usage: autohelp COMMAND ...
 
@@ -90,7 +89,6 @@ Commands:
   (let [output (with-out-str
                  (is (= [::exit 1]
                         (multi/dispatch {:tool-name "noargs"
-                                         :namespaces ['multi-tests]
                                          ;; Can use a unique prefix of command name:
                                          :arguments ["al" "smith" "and" "jones"]}))))]
     (is (= "Usage: noargs alias [OPTIONS]
@@ -108,7 +106,6 @@ Error:
   (let [output (with-out-str
                  (is (= [::exit 1])
                      (multi/dispatch {:tool-name "helpopt"
-                                      :namespaces ['multi-tests]
                                       :arguments ["configure" "-h"]})))]
     (is (= "Usage: helpopt configure [OPTIONS] HOST DATA+
 Configures the system with keys and values
@@ -126,7 +123,8 @@ Arguments:
 (deftest first-argument-must-identify-command
   (let [output (with-out-str
                  (is (= [::exit 1]
-                        (multi/dispatch {:tool-name "test"}))))]
+                        (multi/dispatch {:tool-name "test"
+                                         :namespaces []}))))]
     (is (= "Usage: test COMMAND ...
 
 Commands:
@@ -141,14 +139,12 @@ Error:
   (let [output (with-out-str
                  (is (= [::exit 1]
                         (multi/dispatch {:tool-name "test"
-                                         :namespaces ['multi-tests]
                                          :arguments ["zztop"]}))))]
     (is (str/includes? output "'zztop' is not a command")
         (str "Missing test: " output))))
 
 (deftest capture-arguments-and-options
   (multi/dispatch {:tool-name "cap"
-                   :namespaces ['multi-tests]
                    :arguments ["configure" "-v" "http://localhost:9989" "redux=true" "level=ultra"]})
   (is (= {:arguments {:host "http://localhost:9989"
                       :key-values {:redux "true"
@@ -160,7 +156,6 @@ Error:
   (let [output (with-out-str
                  (is (nil?
                       (multi/dispatch {:tool-name "indent"
-                                       :namespaces ['multi-tests]
                                        :arguments ["capture" "-h"]}))))]
     (is (= "Usage: indent capture [OPTIONS]
 Captures options and arguments
@@ -182,7 +177,6 @@ Options:
   (let [output (with-out-str
                  (is (= [::exit 1]
                         (multi/dispatch {:tool-name "invpos"
-                                         :namespaces ['multi-tests]
                                          :arguments ["configure" "localhost"]}))))]
     (is (= "Usage: invpos configure [OPTIONS] HOST DATA+
 Configures the system with keys and values
@@ -204,7 +198,6 @@ Error:
   (let [output (with-out-str
                  (is (= [::exit 1]
                         (multi/dispatch {:tool-name "invpos"
-                                         :namespaces ['multi-tests]
                                          :arguments ["configure"]}))))]
     (is (= "Usage: invpos configure [OPTIONS] HOST DATA+
 Configures the system with keys and values
