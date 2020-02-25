@@ -9,7 +9,7 @@
    [net.lewisship.multi :as multi :refer [defcommand]]
    [joker.string :as str]
    [joker.os :as os]
-   [joker.test :refer [deftest is use-fixtures]]))
+   [joker.test :refer [deftest is use-fixtures are]]))
 
 (def *data (atom nil))
 
@@ -355,5 +355,28 @@ Error:
                                            :arguments ["c" "ftp://no.way"]}))))]
       (is (str/includes? output "'c' matches commands capture, configure")
           (str "Missing text in: " output))))
+
+(deftest command-wide-help
+  (are [opt]
+       (let [output (with-out-str
+                      (is (= [::exit 0]
+                             (multi/dispatch {:tool-name "helpful"
+                                              :arguments [opt]}))))]
+         (is (= output "Usage: helpful COMMAND ...
+
+This is a test multi-tool.
+
+It has sub-commands.
+
+Commands:
+      alias: <alias docstring>
+    capture: Captures options and arguments
+  configure: Configures the system with keys and values
+       help: Lists available commands
+   set-host: Test when spec contains function literal
+")))
+    "-h"
+    "--help"
+    ))
 
 (joker.test/run-tests)

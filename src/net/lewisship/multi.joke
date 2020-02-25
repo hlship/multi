@@ -18,7 +18,6 @@
 ;; Add :default and maybe :default-fn
 ;; Maybe invert :optional and :required to align with j.t.cli
 ;; Validate that argument ids are unique
-;; Identify command from unique prefix
 
 (defn ^:private show-errors
   [errors]
@@ -354,6 +353,11 @@
            base-command-map {::tool-name tool-name
                              ::tool-doc tool-doc
                              ::command-map commands}]
+
+     (#{"-h" "--help"} command-name)
+     (do
+       (show-tool-help base-command-map nil)
+       (os/exit 0))
 
      (or (nil? command-name)
          (str/starts-with? command-name "-"))
