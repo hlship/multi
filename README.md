@@ -110,6 +110,11 @@ Notes:
 * The interface initially expects to consume a symbol then an option spec
 * The `:args` keyword switches over to consuming symbol and argument spec
 
+The `dispatch` macro normally searches for `defcommand`s in the same namespace, but this can be
+overridden by providing a list of namespace symbols as the `:namespaces` option.
+
+Tool documentation comes from the docstring of the first namespace.
+
 ## defcommand extras
 
 ## :as \<symbol\>
